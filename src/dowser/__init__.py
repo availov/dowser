@@ -5,7 +5,7 @@ import gc
 import os
 import pkg_resources
 localDir = os.path.dirname(pkg_resources.resource_filename(__name__, "main.css"))
-from StringIO import StringIO
+from io import BytesIO
 import sys
 import threading
 import time
@@ -16,7 +16,7 @@ from PIL import ImageDraw
 
 import cherrypy
 
-import reftree
+from . import reftree
 
 
 def get_repr(obj, limit=250):
@@ -76,7 +76,7 @@ class Root:
             else:
                 typecounts[objtype] = 1
 
-        for objtype, count in typecounts.iteritems():
+        for objtype, count in typecounts.items():
             typename = objtype.__module__ + "." + objtype.__name__
             if typename not in self.history:
                 self.history[typename] = [0] * self.samples
@@ -85,14 +85,14 @@ class Root:
         samples = self.samples + 1
 
         # Add dummy entries for any types which no longer exist
-        for typename, hist in self.history.iteritems():
+        for typename, hist in self.history.items():
             diff = samples - len(hist)
             if diff > 0:
                 hist.extend([0] * diff)
 
         # Truncate history to self.maxhistory
         if samples > self.maxhistory:
-            for typename, hist in self.history.iteritems():
+            for typename, hist in self.history.items():
                 hist.pop(0)
         else:
             self.samples = samples
@@ -103,7 +103,7 @@ class Root:
     def index(self, floor=0):
         rows = []
         typenames = self.history.keys()
-        typenames.sort()
+        typenames = sorted(typenames)
         for typename in typenames:
             hist = self.history[typename]
             maxhist = max(hist)
@@ -132,9 +132,10 @@ class Root:
                   fill="#009900")
         del draw
 
-        f = StringIO()
+        f = BytesIO()
         im.save(f, "PNG")
         result = f.getvalue()
+
 
         cherrypy.response.headers["Content-Type"] = "image/png"
         return result
@@ -158,8 +159,9 @@ class Root:
         for obj in gc.get_objects():
             objtype = type(obj)
             if objtype.__module__ + "." + objtype.__name__ == typename:
-                rows.append("<p class='obj'>%s</p>"
-                            % ReferrerTree(obj).get_repr(obj))
+                rows.append((len(obj) if hasattr(obj, '__len__') else 1, "<p class='obj'>%s</p>" % ReferrerTree(obj).get_repr(obj)))
+
+        rows = [item for _, item in sorted(rows, reverse=True)]
         if not rows:
             rows = ["<h3>The type you requested was not found.</h3>"]
         return rows
@@ -322,13 +324,13 @@ class ReferrerTree(reftree.Tree):
     def get_refkey(self, obj, referent):
         """Return the dict key or attribute name of obj which refers to referent."""
         if isinstance(obj, dict):
-            for k, v in obj.iteritems():
+            for k, v in obj.items():
                 if v is referent:
-                    return " (via its %r key)" % k
+                    return f" (via its {k} key)"
 
         for k in dir(obj) + ['__dict__']:
             if getattr(obj, k, None) is referent:
-                return " (via its %r attribute)" % k
+                return f" (via its {k} attribute)"
         return ""
 
 
